@@ -5,13 +5,8 @@ COMMAND=$@
 
 cd /app
 
-chown -R www-data:www-data storage /var/lib/nginx
+chown -R www-data:www-data /var/lib/nginx
 
-if [[ "$APP_STAGE" == 'prod' ]]; then
-    cp .env.example .env
-    composer install
-fi
-
-exec $COMMAND
+exec supervisord -c /etc/supervisord.conf
 
 sleep 60

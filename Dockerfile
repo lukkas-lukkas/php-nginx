@@ -40,10 +40,6 @@ RUN docker-php-ext-install \
         && mkdir -p /app \
         && chown -R www-data:www-data /app
 
-WORKDIR /app
-
-#ENTRYPOINT ["sh", "-c"]
-
 RUN apk add --no-cache nginx \
     supervisor
 
@@ -55,21 +51,8 @@ RUN docker-php-ext-install pdo_mysql \
     && docker-php-ext-enable pdo_mysql
 
 COPY docker/ /
-
-COPY --from=composer:2.0 /usr/bin/composer /usr/bin/composer
-
-COPY composer.* /app/
-
-WORKDIR /app
-
-RUN if [ "$APP_STAGE" = "prod" ] ; then \
-        composer install --no-autoloader --no-interaction; else \
-        composer install --no-autoloader --no-interaction --no-dev --no-scripts; \
-    fi
-
 COPY . /app
 
-RUN composer dump-autoload --no-scripts --optimize \
-    && rm -rf /root/.composer
+WORKDIR /app
 
 ENTRYPOINT ["/bin/sh", "/app/docker-entrypoint.sh"]
