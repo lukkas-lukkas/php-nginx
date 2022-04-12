@@ -1,41 +1,75 @@
-FROM php:8.0.2-fpm-alpine
+FROM php:7.4.9-fpm-alpine3.12
 
-# Copy project
-COPY ./src /var/www/html
+ENV RBKAFKA_VERSION='3.1.1'
+ENV XDEBUG_VERSION='2.9.8'
+ENV APP_STAGE='prod'
 
-# Setup document root
-WORKDIR /var/www/html
+RUN apk --update add --no-cache \
+    ${PHPIZE_DEPS} \
+    libpng-dev \
+    openssl-dev \
+    gd \
+    "libxml2-dev>=2.9.10-r5" \
+    git \
+    "freetype>=2.10.4-r0" \
+    && rm -rf /var/cache/apk/*
 
-# Install packages and remove default server definition
-RUN apk add --no-cache \
-  curl \
-  nginx \
-  supervisor
+RUN apk update && \
+    apk del oniguruma && \
+    wget -c https://github.com/kkos/oniguruma/releases/download/v6.9.6_rc4/onig-6.9.6-rc4.tar.gz -O - | tar -xz && \
+    (cd onig-6.9.6 && ./configure && make install) && \
+    rm -rf ./onig-6.9.6 && \
+    rm -rf /var/cache/apk/*
 
-# Configure nginx
-COPY config/nginx.conf /etc/nginx/nginx.conf
+RUN docker-php-ext-install \
+        mbstring \
+        gd \
+        soap \
+        xml \
+        posix \
+        tokenizer \
+        ctype \
+        pcntl \
+        opcache \
+        && echo "opcache.enable_cli=1" >> /usr/local/etc/php/conf.d/docker-php-ext-opcache.ini \
+        && echo "opcache.validate_timestamps=0" >> /usr/local/etc/php/conf.d/docker-php-ext-opcache.ini \
+        && pecl install -f apcu \
+        && echo 'extension=apcu.so' > /usr/local/etc/php/conf.d/30_apcu.ini \
+        && chmod -R 755 /usr/local/lib/php/extensions/ \
+        && curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/bin --filename=composer \
+        && mkdir -p /app \
+        && chown -R www-data:www-data /app
 
-# Configure PHP-FPM
-COPY config/fpm-pool.conf /etc/php8/php-fpm.d/www.conf
-COPY config/php.ini /etc/php8/conf.d/custom.ini
+WORKDIR /app
 
-# Configure supervisord
-COPY config/supervisord.conf /etc/supervisor/conf.d/supervisord.conf
+#ENTRYPOINT ["sh", "-c"]
 
-# Make sure files/folders needed by the processes are accessable when they run under the nobody user
-RUN chown -R nobody.nobody /var/www/html /run /var/lib/nginx /var/log/nginx
+RUN apk add --no-cache nginx \
+    supervisor
 
-# Switch to use a non-root user from here on
-USER nobody
+RUN apk add --no-cache librdkafka-dev \
+    && pecl install rdkafka-${RBKAFKA_VERSION} \
+    && docker-php-ext-enable rdkafka
 
-# Add application
-COPY --chown=nobody src/ /var/www/html/
+RUN docker-php-ext-install pdo_mysql \
+    && docker-php-ext-enable pdo_mysql
 
-# Expose the port nginx is reachable on
-EXPOSE 8080
+COPY docker/ /
 
-# Let supervisord start nginx & php-fpm
-CMD ["/usr/bin/supervisord", "-c", "/etc/supervisor/conf.d/supervisord.conf"]
+COPY --from=composer:2.0 /usr/bin/composer /usr/bin/composer
 
-# Configure a healthcheck to validate that everything is up&running
-HEALTHCHECK --timeout=10s CMD curl --silent --fail http://127.0.0.1:8080/fpm-ping
+COPY composer.* /app/
+
+WORKDIR /app
+
+RUN if [ "$APP_STAGE" = "prod" ] ; then \
+        composer install --no-autoloader --no-interaction; else \
+        composer install --no-autoloader --no-interaction --no-dev --no-scripts; \
+    fi
+
+COPY . /app
+
+RUN composer dump-autoload --no-scripts --optimize \
+    && rm -rf /root/.composer
+
+ENTRYPOINT ["/bin/sh", "/app/docker-entrypoint.sh"]
