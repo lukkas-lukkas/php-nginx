@@ -8,6 +8,4 @@ COPY . /app
 
 WORKDIR /app
 
-RUN chown -R www-data:www-data /var/lib/nginx
-
 ENTRYPOINT ["/bin/sh", "/app/docker-entrypoint.sh"]
