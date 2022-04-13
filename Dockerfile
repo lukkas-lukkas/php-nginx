@@ -8,4 +8,6 @@ COPY . /app
 
 WORKDIR /app
 
+EXPOSE 80
+
 ENTRYPOINT ["/bin/sh", "/app/docker-entrypoint.sh"]
