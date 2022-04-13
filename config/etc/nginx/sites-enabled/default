@@ -7,7 +7,7 @@ server {
     # para parametros como 'app_version'
     underscores_in_headers on;
 
-    root /app/public;
+    root /app/application/public;
     index index.php index.html;
 
     location / {
