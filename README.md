@@ -9,3 +9,5 @@
     >make build-run
 
 The project should be running in localhost:8080
+
+[View in dockerhub](https://hub.docker.com/r/lukkaslukkas/php-8.0.0-alpine3.12)
